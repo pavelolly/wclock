@@ -1,0 +1,11 @@
+# vscode
+.vscode/
+
+# executables
+*.o
+*.exe
+
+# generated files
+*.wclock
+*.wclock.old
+
