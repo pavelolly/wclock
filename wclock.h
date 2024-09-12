@@ -12,10 +12,12 @@ typedef struct {
 typedef struct {
     WClockSession* sessions;
     int numSessions;
+    bool lastSessionActive;
 } WClock;
 
 void WClockDestroy(WClock *wclock);
 
+// .wclock files dump and load
 bool WClockDumpFile(WClock *wclock, const char *filename);
 bool WClockLoadFile(WClock *wclock, const char *filename);
 

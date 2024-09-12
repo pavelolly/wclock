@@ -11,7 +11,8 @@ int main(void) {
     };
     WClock wclock = {
         .sessions = sessions,
-        .numSessions = sizeof(sessions)/sizeof(*sessions)
+        .numSessions = sizeof(sessions)/sizeof(*sessions),
+        .lastSessionActive = false
     };
 
     if (!WClockDumpFile(&wclock, ".wclock")) {
@@ -27,6 +28,7 @@ int main(void) {
     for (int i = 0; i < wclock.numSessions; i++) {
         printf("Session %d: %lld : %lld\n", i, wclock.sessions[i].start, wclock.sessions[i].end);
     }
+    printf("Active: %d\n", wclock.lastSessionActive);
 
     WClockDestroy(&wclock);
 

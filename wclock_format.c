@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <assert.h>
+
+#include "static_assert.h"
 
 #include "wclock.h"
 
@@ -12,17 +15,19 @@ static inline int GetEndian(void) {
     return u.c == 0; // 1 if big-endian
 }
 
-static time_t ReverseBytes(time_t t) {
-    assert(sizeof(t) == 8 && "time_t not being 8 bytes is not handled");
+STATIC_ASSERT(sizeof(time_t) == 8 && "time_t not being 8 bytes is not handled");
 
-    return t & (0xffull << 0*8) << (64 - 1*8) |
-           t & (0xffull << 1*8) << (64 - 2*8) |
-           t & (0xffull << 2*8) << (64 - 3*8) |
-           t & (0xffull << 3*8) << (64 - 4*8) |
-           t & (0xffull << 4*8) << (64 - 5*8) |
-           t & (0xffull << 5*8) << (64 - 6*8) |
-           t & (0xffull << 6*8) << (64 - 7*8) |
-           t & (0xffull << 7*8) << (64 - 8*8);
+static time_t ReverseBytes(time_t t) {
+    const static time_t byte = 0xff;
+    return ((t & (byte << 0*8)) << (7*8)) |
+           ((t & (byte << 1*8)) << (5*8)) |
+           ((t & (byte << 2*8)) << (3*8)) |
+           ((t & (byte << 3*8)) << (1*8)) |
+
+           ((t & (byte << 4*8)) >> (1*8)) |
+           ((t & (byte << 5*8)) >> (3*8)) |
+           ((t & (byte << 6*8)) >> (5*8)) |
+           ((t & (byte << 7*8)) >> (7*8));
 }
 
 #ifdef DEBUG
@@ -31,6 +36,7 @@ static time_t ReverseBytes(time_t t) {
     #define DEBUG_LOG(...)
 #endif
 
+// returns number of bytes from the current file position to the end of file
 static long FileSize(FILE *file) {
     long pos = ftell(file);
     if (pos < 0) {
@@ -79,16 +85,28 @@ bool WClockDumpFile(WClock *wclock, const char *filename)  {
         WF_SECOND_BYTE
     };
 
-    size_t objectsWritten = fwrite(headerBytes, 1, 2, file);
-    if (objectsWritten != 2) {
-        DEBUG_LOG("[DUMP]: Could not write first to bytes\n");
+    // write header bytes
+
+    if (fwrite(headerBytes, 1, 2, file) != 2) {
+        DEBUG_LOG("[DUMP]: Could not write first two bytes\n");
 
         returnValue = false;
         goto defer;
     }
 
-    objectsWritten = fwrite(wclock->sessions, sizeof(WClockSession), wclock->numSessions, file);
-    if (objectsWritten < wclock->numSessions) {
+    // write state
+
+    unsigned char byte = wclock->lastSessionActive;
+    if (fwrite(&byte, 1, 1, file) < 1) {
+        DEBUG_LOG("[DUMP]: Could not write state\n");
+
+        returnValue = false;
+        goto defer;
+    }
+
+    // write sessions
+
+    if (fwrite(wclock->sessions, sizeof(WClockSession), wclock->numSessions, file) < wclock->numSessions) {
         DEBUG_LOG("[DUMP]: Could not write all the sessions\n");
 
         returnValue = false;
@@ -115,15 +133,28 @@ bool WClockLoadFile(WClock *wclock, const char *filename) {
         goto defer;
     }
 
+    // read header bytes
+
     uint8_t headerBytes[2];
-    size_t objectsRead = fread(headerBytes, 1, 2, file);
-    if (objectsRead < 2) {
+    if (fread(headerBytes, 1, 2, file) < 2) {
         DEBUG_LOG("[LOAD]: Failed to read first two bytes\n");
 
         returnValue = false;
         goto defer;
     }
 
+    // read state
+
+    unsigned char byte;
+    if (fread(&byte, 1, 1, file) < 1) {
+        DEBUG_LOG("[LOAD]: Failed to read state\n");
+
+        returnValue = false;
+        goto defer;
+    }
+
+    // read sessions
+    
     int endian = GetEndian();
     int fileEndian;
     if (headerBytes[0] == WF_FIRST_BYTE_BE) {
@@ -161,8 +192,7 @@ bool WClockLoadFile(WClock *wclock, const char *filename) {
 
     int numSessions = bytesLeft / sizeof(WClockSession);
     WClockSession *sessions = malloc(numSessions * sizeof(WClockSession));
-    objectsRead = fread(sessions, sizeof(WClockSession), numSessions, file);
-    if (objectsRead < numSessions) {
+    if (fread(sessions, sizeof(WClockSession), numSessions, file) < numSessions) {
         DEBUG_LOG("[LOAD]: Failed to read bytes for sessions\n");
 
         free(sessions);
@@ -179,6 +209,7 @@ bool WClockLoadFile(WClock *wclock, const char *filename) {
 
     wclock->sessions    = sessions;
     wclock->numSessions = numSessions;
+    wclock->lastSessionActive = byte;
 defer:
     fclose(file);
     return returnValue;
