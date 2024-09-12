@@ -2,7 +2,17 @@
 #define WCLOCK_H
 
 #include <time.h>
-#include <stdbool.h>
+#include <stdint.h>
+
+#ifdef bool
+    #undef bool
+#endif
+
+typedef uint8_t bool;
+#define false 0
+#define true  1
+
+typedef unsigned int uint;
 
 typedef struct {
     time_t start;
@@ -10,15 +20,22 @@ typedef struct {
 } WClockSession;
 
 typedef struct {
+    // array of sessions
     WClockSession* sessions;
-    int numSessions;
-    bool lastSessionActive;
+    int count;
+    int capacity;
+
+    // state
+    uint8_t lastSessionActive;
 } WClock;
+
+void WClockStartSession(WClock *wclock);
+void WClockEndSession(WClock *wclock);
 
 void WClockDestroy(WClock *wclock);
 
 // .wclock files dump and load
-bool WClockDumpFile(WClock *wclock, const char *filename);
-bool WClockLoadFile(WClock *wclock, const char *filename);
+bool WClockDumpFile(const char *filename, WClock *wclock);
+bool WClockLoadFile(const char *filename, WClock *wclock);
 
 #endif // WCLOCK_H

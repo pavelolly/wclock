@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include <assert.h>
 
 #include "static_assert.h"
@@ -12,22 +11,30 @@ enum { LITTLE_ENDIAN = 0, BIG_ENDIAN = 1 };
 
 static inline int GetEndian(void) {
     static union {int i; char c;} u = {.i = 1};
-    return u.c == 0; // 1 if big-endian
+    return u.c == 0; // true means BIG_ENDIAN; false means LITTLE_ENDIAN
 }
-
-STATIC_ASSERT(sizeof(time_t) == 8 && "time_t not being 8 bytes is not handled");
 
 static time_t ReverseBytes(time_t t) {
     const static time_t byte = 0xff;
-    return ((t & (byte << 0*8)) << (7*8)) |
-           ((t & (byte << 1*8)) << (5*8)) |
-           ((t & (byte << 2*8)) << (3*8)) |
-           ((t & (byte << 3*8)) << (1*8)) |
+    if (sizeof(time_t) == 8) {
+        return ((t & (byte << 0*8)) << (7*8)) |
+               ((t & (byte << 1*8)) << (5*8)) |
+               ((t & (byte << 2*8)) << (3*8)) |
+               ((t & (byte << 3*8)) << (1*8)) |
 
-           ((t & (byte << 4*8)) >> (1*8)) |
-           ((t & (byte << 5*8)) >> (3*8)) |
-           ((t & (byte << 6*8)) >> (5*8)) |
-           ((t & (byte << 7*8)) >> (7*8));
+               ((t & (byte << 4*8)) >> (1*8)) |
+               ((t & (byte << 5*8)) >> (3*8)) |
+               ((t & (byte << 6*8)) >> (5*8)) |
+               ((t & (byte << 7*8)) >> (7*8));
+    } else if (sizeof(time_t) == 4) {
+        return ((t & (byte << 0*8)) << (3*8)) |
+               ((t & (byte << 1*8)) << (1*8)) |
+
+               ((t & (byte << 2*8)) >> (1*8)) |
+               ((t & (byte << 3*8)) >> (3*8));
+    }
+
+    assert(false && "sizeof(time_t) is neither 4 nor 8");
 }
 
 #ifdef DEBUG
@@ -40,31 +47,161 @@ static time_t ReverseBytes(time_t t) {
 static long FileSize(FILE *file) {
     long pos = ftell(file);
     if (pos < 0) {
-        DEBUG_LOG("[FileSize]: pos < 0 (%d)\n", pos);
         return -1;
     }
     if (fseek(file, 0, SEEK_END)) {
-        DEBUG_LOG("[FileSize]: Could not seek for SEEK_END\n");
         return -1;
     }
     long size = ftell(file);
     if (size < 0) {
-        DEBUG_LOG("[FileSize]: size < 0 (%d)\n", size);
         return -1;
     }
     if (fseek(file, pos, SEEK_SET)) {
-        DEBUG_LOG("[FileSize]: Could not seek for SEEK_SET + pos\n");
         return -1;
     }
     return size - pos;
 }
 
-// header bytes for .wclock files
-#define WF_FIRST_BYTE_LE 0xc1u // LITTLE-ENDIAN
-#define WF_FIRST_BYTE_BE 0xcbu // BIG-ENDIAN
-#define WF_SECOND_BYTE   0x0cu
+// .wclock format version
+#define WF_VERSION_MAJOR ((unsigned char)0)
+#define WF_VERSION_MINOR ((unsigned char)0)
 
-bool WClockDumpFile(WClock *wclock, const char *filename)  {
+// .wclock header bytes
+#define WF_FIRST_BYTE_LE ((unsigned char)0xc1u) // LITTLE-ENDIAN
+#define WF_FIRST_BYTE_BE ((unsigned char)0xcbu) // BIG-ENDIAN
+#define WF_SECOND_BYTE_4 ((unsigned char)0x4cu) // sizeof(time_t) == 4
+#define WF_SECOND_BYTE_8 ((unsigned char)0x8cu) // sizeof(time_t) == 8
+
+struct WClockSystemInfo {
+    uint8_t endian;
+    uint8_t sizeofTime;
+};
+
+static bool WClockDumpSystemInfo(struct WClockSystemInfo *sys, FILE *file) {
+    if (sys->endian == LITTLE_ENDIAN) {
+        sys->endian = WF_FIRST_BYTE_LE;
+    } else if (sys->endian == BIG_ENDIAN) {
+        sys->endian = WF_FIRST_BYTE_BE;
+    } else {
+        return false;
+    }
+
+    if (sys->sizeofTime == 4) {
+        sys->sizeofTime = WF_SECOND_BYTE_4;
+    } else if (sys->sizeofTime == 8) {
+        sys->sizeofTime = WF_SECOND_BYTE_8;
+    } else {
+        return false;
+    }
+
+    if (fwrite(sys, 1, 2, file) != 2) {
+        return false;
+    }
+    
+    return true;
+}
+
+static bool WClockLoadSystemInfo(struct WClockSystemInfo *sys, FILE *file) {
+    struct WClockSystemInfo tmp;
+    if (fread(&tmp, 1, 2, file) != 2) {
+        return false;
+    }
+
+    if (tmp.endian == WF_FIRST_BYTE_LE) {
+        tmp.endian = LITTLE_ENDIAN;
+    } else if (tmp.endian == WF_FIRST_BYTE_BE) {
+        tmp.endian = BIG_ENDIAN;
+    } else {
+        return false;
+    }
+
+    if (tmp.sizeofTime == WF_SECOND_BYTE_4) {
+        tmp.sizeofTime = 4;
+    } else if (tmp.sizeofTime == WF_SECOND_BYTE_8) {
+        tmp.sizeofTime = 8;
+    } else {
+        return false;
+    }
+
+    sys->endian = tmp.endian;
+    sys->sizeofTime = tmp.sizeofTime;
+    return true;
+}
+
+struct WClockVersionInfo {
+    uint8_t major;
+    uint8_t minor;
+};
+
+static bool WClockDumpVersionInfo(struct WClockVersionInfo *ver, FILE* file) {
+    return fwrite(ver, 1, 2, file) == 2;
+}
+
+static bool WClockLoadVersionInfo(struct WClockVersionInfo *ver, FILE *file) {
+    struct WClockVersionInfo tmp;
+    if (fread(&tmp, 1, 2, file) != 2) {
+        return false;
+    }
+
+    ver->major = tmp.major;
+    ver->minor = tmp.minor;
+    return true;
+}
+
+static bool WClockDumpWClock(WClock *wclock, FILE *file) {
+    if (fwrite(&wclock->lastSessionActive, 1, 1, file) != 1) {
+        return false;
+    }
+
+    if (fwrite(wclock->sessions, sizeof(WClockSession), wclock->count, file) != wclock->count) {
+        return false;
+    }
+
+    return true;
+}
+
+static bool WClockLoadWclock(WClock *wclock, struct WClockSystemInfo *sys, [[maybe_unused]] struct WClockVersionInfo *ver, FILE *file) {
+    WClock tmp;
+
+    bool differentEndian     = GetEndian() != sys->endian;
+    bool differentSizeofTime = sizeof(time_t) != sys->sizeofTime;
+
+    if (fread(&tmp.lastSessionActive, 1, 1, file)) {
+        return false;
+    }
+
+    long bytesLeft = FileSize(file);
+    if (bytesLeft % (sys->sizeofTime * 2) != 0) {
+        return false;
+    }
+    int countSessions = bytesLeft / (sys->sizeofTime * 2);
+
+    // allocate memeory for countSessions + 1 elements because it is very likely that you will create new session in future
+    tmp.sessions = malloc((countSessions + 1) * sizeof(WClockSession));
+    tmp.count    = countSessions;
+    tmp.capacity = countSessions + 1;
+
+    uint64_t buf[2]; // you need at most 2 * 8 bytes per session
+    for (int i = 0; i < tmp.count; i++) {
+        if (fwrite(buf, sys->sizeofTime, 2, file) != 2) {
+            return false;
+        }
+        if (differentSizeofTime && sys->sizeofTime < sizeof(time_t)) {
+            // split buf[0] into 2 parts and share them between buf[0] and buf[1]
+            buf[1] = buf[0] & 0xffffffff;
+            buf[0] = buf[0] >> 32; 
+        }
+        tmp.sessions[i].start = buf[0];
+        tmp.sessions[i].end   = buf[1];
+
+        if (differentEndian) {
+            tmp.sessions[i].start = ReverseBytes(tmp.sessions[i].start);
+            tmp.sessions[i].end   = ReverseBytes(tmp.sessions[i].end);
+        }
+    }
+}
+
+bool WClockDumpFile(const char *filename, WClock *wclock)  {
     if (!wclock) {
         DEBUG_LOG("[DUMP]: wclock is NULL\n");
         return false;
@@ -74,40 +211,44 @@ bool WClockDumpFile(WClock *wclock, const char *filename)  {
     bool returnValue = true;
     
     if (!file) {
-        DEBUG_LOG("[DUMP]: Failed to open '%s'\n", filename);
+        DEBUG_LOG("[DUMP]: Could not open '%s'\n", filename);
 
         returnValue = false;
         goto defer;
     }
 
-    uint8_t headerBytes[2] = {
-        GetEndian() == LITTLE_ENDIAN ? WF_FIRST_BYTE_LE : WF_FIRST_BYTE_BE,
-        WF_SECOND_BYTE
+    // write system info
+
+    struct WClockSystemInfo sys = {
+        .endian     = GetEndian(),
+        .sizeofTime = sizeof(time_t)
     };
 
-    // write header bytes
-
-    if (fwrite(headerBytes, 1, 2, file) != 2) {
-        DEBUG_LOG("[DUMP]: Could not write first two bytes\n");
+    if (!WClockDumpSystemInfo(&sys, file)) {
+        DEBUG_LOG("[DUMP] Failed to dump system info\n");
 
         returnValue = false;
         goto defer;
     }
 
-    // write state
+    // write version
 
-    unsigned char byte = wclock->lastSessionActive;
-    if (fwrite(&byte, 1, 1, file) < 1) {
-        DEBUG_LOG("[DUMP]: Could not write state\n");
+    struct WClockVersionInfo ver = {
+        .major = WF_VERSION_MAJOR,
+        .minor = WF_VERSION_MINOR
+    };
+
+    if (!WClockDumpVersionInfo(&ver, file)) {
+        DEBUG_LOG("[DUMP] Failed to dump version info\n");
 
         returnValue = false;
         goto defer;
     }
 
-    // write sessions
+    // write wclock itself
 
-    if (fwrite(wclock->sessions, sizeof(WClockSession), wclock->numSessions, file) < wclock->numSessions) {
-        DEBUG_LOG("[DUMP]: Could not write all the sessions\n");
+    if (!WClockDumpWClock(wclock, file)) {
+        DEBUG_LOG("[DUMP] Failed to dump wclock body\n");
 
         returnValue = false;
         goto defer;
@@ -118,7 +259,7 @@ defer:
     return returnValue;
 }
 
-bool WClockLoadFile(WClock *wclock, const char *filename) {
+bool WClockLoadFile(const char *filename, WClock *wclock) {
     if (!wclock) {
         DEBUG_LOG("[LOAD]: wclock is NULL\n");
         return false;
@@ -133,83 +274,35 @@ bool WClockLoadFile(WClock *wclock, const char *filename) {
         goto defer;
     }
 
-    // read header bytes
+    // read system info
 
-    uint8_t headerBytes[2];
-    if (fread(headerBytes, 1, 2, file) < 2) {
-        DEBUG_LOG("[LOAD]: Failed to read first two bytes\n");
-
-        returnValue = false;
-        goto defer;
-    }
-
-    // read state
-
-    unsigned char byte;
-    if (fread(&byte, 1, 1, file) < 1) {
-        DEBUG_LOG("[LOAD]: Failed to read state\n");
+    struct WClockSystemInfo sys;
+    if (!WClockLoadSystemInfo(&sys, file)) {
+        DEBUG_LOG("[LOAD] Failed to load system info\n");
 
         returnValue = false;
         goto defer;
     }
 
-    // read sessions
-    
-    int endian = GetEndian();
-    int fileEndian;
-    if (headerBytes[0] == WF_FIRST_BYTE_BE) {
-        fileEndian = BIG_ENDIAN;
-    } else if (headerBytes[0] == WF_FIRST_BYTE_LE) {
-        fileEndian = LITTLE_ENDIAN;
-    } else {
-        DEBUG_LOG("[LOAD]: First byte is neither 0xc1 nor 0xcb\n");
+    // read version
 
-        returnValue = false;
-        goto defer;
-    }
-    if (headerBytes[1] != WF_SECOND_BYTE) {
-        DEBUG_LOG("[LOAD]: Second byte is not 0x0c\n");
+    struct WClockVersionInfo ver;
+    if (!WClockLoadVersionInfo(&ver, file)) {
+        DEBUG_LOG("[LOAD] Failed to load version info\n");
 
         returnValue = false;
         goto defer;
     }
 
-    bool reverseBytes = endian != fileEndian;
-    long bytesLeft = FileSize(file);
-    if (bytesLeft < 0) {
-        DEBUG_LOG("[LOAD]: Failed to determine size of file (FileSize returned %ld)\n", bytesLeft);
+    // read wclock itself
+
+    if (!WClockLoadWclock(wclock, &sys, &ver, file)) {
+        DEBUG_LOG("[LOAD] Failed to load wclock body\n");
 
         returnValue = false;
         goto defer;
     }
 
-    if (bytesLeft % sizeof(WClockSession) != 0) {
-        DEBUG_LOG("[LOAD]: Number of bytes in file is not divisible by sizeof(WClockSession)\n");
-
-        returnValue = false;
-        goto defer;
-    }
-
-    int numSessions = bytesLeft / sizeof(WClockSession);
-    WClockSession *sessions = malloc(numSessions * sizeof(WClockSession));
-    if (fread(sessions, sizeof(WClockSession), numSessions, file) < numSessions) {
-        DEBUG_LOG("[LOAD]: Failed to read bytes for sessions\n");
-
-        free(sessions);
-        returnValue = false;
-        goto defer;
-    }
-
-    if (reverseBytes) {
-        for (int i = 0; i < numSessions; i++) {
-            sessions[i].start = ReverseBytes(sessions[i].start);
-            sessions[i].end   = ReverseBytes(sessions[i].end);
-        }
-    }
-
-    wclock->sessions    = sessions;
-    wclock->numSessions = numSessions;
-    wclock->lastSessionActive = byte;
 defer:
     fclose(file);
     return returnValue;
