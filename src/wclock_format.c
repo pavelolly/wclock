@@ -1,9 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <assert.h>
-
-#include "static_assert.h"
 
 #include "wclock.h"
 
@@ -15,7 +14,7 @@ static inline int GetEndian(void) {
 }
 
 static time_t ReverseBytes(time_t t) {
-    const static time_t byte = 0xff;
+    static const time_t byte = 0xff;
     if (sizeof(time_t) == 8) {
         return ((t & (byte << 0*8)) << (7*8)) |
                ((t & (byte << 1*8)) << (5*8)) |
@@ -153,7 +152,7 @@ static bool WClockDumpWClock(WClock *wclock, FILE *file) {
         return false;
     }
 
-    if (fwrite(wclock->sessions, sizeof(WClockSession), wclock->count, file) != wclock->count) {
+    if (fwrite(wclock->sessions, sizeof(WClockSession), wclock->count, file) != (size_t)wclock->count) {
         return false;
     }
 
@@ -166,7 +165,7 @@ static bool WClockLoadWclock(WClock *wclock, struct WClockSystemInfo *sys, [[may
     bool differentEndian     = GetEndian() != sys->endian;
     bool differentSizeofTime = sizeof(time_t) != sys->sizeofTime;
 
-    if (fread(&tmp.lastSessionActive, 1, 1, file)) {
+    if (fread(&tmp.lastSessionActive, 1, 1, file) != 1) {
         return false;
     }
 
@@ -177,13 +176,14 @@ static bool WClockLoadWclock(WClock *wclock, struct WClockSystemInfo *sys, [[may
     int countSessions = bytesLeft / (sys->sizeofTime * 2);
 
     // allocate memeory for countSessions + 1 elements because it is very likely that you will create new session in future
-    tmp.sessions = malloc((countSessions + 1) * sizeof(WClockSession));
+    tmp.sessions = (WClockSession *)malloc((countSessions + 1) * sizeof(WClockSession));
     tmp.count    = countSessions;
     tmp.capacity = countSessions + 1;
 
     uint64_t buf[2]; // you need at most 2 * 8 bytes per session
     for (int i = 0; i < tmp.count; i++) {
-        if (fwrite(buf, sys->sizeofTime, 2, file) != 2) {
+        if (fread(buf, sys->sizeofTime, 2, file) != 2) {
+            free(tmp.sessions);
             return false;
         }
         if (differentSizeofTime && sys->sizeofTime < sizeof(time_t)) {
@@ -199,6 +199,10 @@ static bool WClockLoadWclock(WClock *wclock, struct WClockSystemInfo *sys, [[may
             tmp.sessions[i].end   = ReverseBytes(tmp.sessions[i].end);
         }
     }
+
+    WClockDestroy(wclock);
+    memcpy(wclock, &tmp, sizeof(*wclock));
+    return true;
 }
 
 bool WClockDumpFile(const char *filename, WClock *wclock)  {
