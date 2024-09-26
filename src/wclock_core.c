@@ -43,6 +43,11 @@ WClockSession WClockGetLastSession(WClock *wclock) {
     return wclock->sessions[wclock->count - 1];
 }
 
+char *WClockTimeToString(char *dest, size_t destSize, time_t time) {
+    strftime(dest, destSize, "%d.%m.%Y %H:%M:%S", localtime(&time));
+    return dest;
+}
+
 void WClockPrint(WClock *wclock) {
     printf("State: %d\n", wclock->lastSessionActive);
     for (int i = 0; i < wclock->count; i++) {

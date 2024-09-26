@@ -5,10 +5,10 @@
 #define PATH_SEP_CHAR '\\'
 
 #define MINIRENT_IMPLEMENTATION
-#include <utils/minirent.h>
+#include "minirent.h"
 
-#include <utils/darray.h>
-#include <utils/dstring.h>
+#include "darray.h"
+#include "dstring.h"
 
 #include "wclock.h"
 

@@ -1,12 +1,11 @@
-include ../Makefile.var
 
-WCLOCK_SOURCES = wclock_main.c wclock_format.c wclock_filesystem.c
-WCLOCK_OBJECTS = wclock_main.o wclock_format.o wclock_filesystem.o
+CC = gcc
+RM = rm -f
 
-wclock.o: $(WCLOCK_SOURCES) wclock.h
-	${CC} ${CFLAGS} ${DFLAGS} -I../ -c $(WCLOCK_SOURCES)
-	${LD} -relocatable $(WCLOCK_OBJECTS) -o wclock.o
+CFLAGS = --std=c99 -Wall -Wextra -ggdb
 
-.PHONY: clean
-clean:
-	${RM} *.o *.exe
+SOURCES = darray.c dstring.c wclock_cli.c wclock_core.c wclock_filesystem.c wclock_format.c
+HEADERS = darray.h dstring.h minirent.h static_assert.h wclock.h
+
+../wclock.exe: ${SOURCES} ${HEADERS}
+	${CC} ${CFLAGS} -o ../wclock.exe ${SOURCES}

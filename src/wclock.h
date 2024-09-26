@@ -4,9 +4,9 @@
 #include <time.h>
 #include <stdint.h>
 
-#ifdef bool
-    #undef bool
-#endif
+#undef bool
+#undef false
+#undef true
 
 typedef uint8_t bool;
 #define false 0
@@ -34,8 +34,9 @@ void WClockEndSession(WClock *wclock);
 
 WClockSession WClockGetLastSession(WClock *wclock);
 
-void WClockPrint(WClock *wclock);
+char *WClockTimeToString(char *dest, size_t destSize, time_t time);
 
+void WClockPrint(WClock *wclock);
 void WClockDestroy(WClock *wclock);
 
 // .wclock files dump and load
