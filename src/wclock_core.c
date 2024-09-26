@@ -34,6 +34,15 @@ void WClockEndSession(WClock *wclock) {
     time(&wclock->sessions[wclock->count - 1].end);
 }
 
+void WClockClear(WClock *wclock) {
+    if (!wclock) {
+        return;
+    }
+
+    wclock->count = 0;
+    wclock->lastSessionActive = 0;
+}
+
 WClockSession WClockGetLastSession(WClock *wclock) {
     if (!wclock || !wclock->count) {
         WClockSession s = {.start = -1, .end = -1};

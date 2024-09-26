@@ -10,6 +10,7 @@ enum Subcommand {
     INVALID = -1,
     START,
     END,
+    CLEAR,
     STATUS,
     HELP
 };
@@ -78,6 +79,14 @@ int main(int argc, char *argv[]) {
             }
 
             break;
+        case CLEAR:
+            WClockClear(&wclock);
+            if (!WClockDumpFile(".wclock", &wclock)) {
+                printf("Failed to dump to .wclock\n");
+                return 1;
+            }
+
+            break;
         case STATUS:
             if (couldLoad) {
                 printf("Recorded %d sessions:\n", wclock.count);
@@ -102,6 +111,8 @@ int main(int argc, char *argv[]) {
             assert(false && "Unreachable");
     }
 
+    WClockDestroy(&wclock);
+
     printf("Done with no segfaults!\n");
 
     return 0;
@@ -112,6 +123,7 @@ void Usage() {
     printf("Subcommands:\n");
     printf("  start     start new session\n");
     printf("  end       end current session\n");
+    printf("  clear     clear information about sessions\n");
     printf("  status    show status of current session\n");
     printf("\n");
     printf("  help      show this page\n");
@@ -124,6 +136,9 @@ enum Subcommand GetSubcommand(const char *literal) {
     }
     if (!strcmp(literal, "end")) {
         return END;
+    }
+    if (!strcmp(literal, "clear")) {
+        return CLEAR;
     }
     if (!strcmp(literal, "status")) {
         return STATUS;

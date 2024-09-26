@@ -31,6 +31,7 @@ typedef struct {
 
 void WClockStartSession(WClock *wclock);
 void WClockEndSession(WClock *wclock);
+void WClockClear(WClock *wclock);
 
 WClockSession WClockGetLastSession(WClock *wclock);
 
