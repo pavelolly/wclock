@@ -34,6 +34,15 @@ void WClockEndSession(WClock *wclock) {
     time(&wclock->sessions[wclock->count - 1].end);
 }
 
+WClockSession WClockGetLastSession(WClock *wclock) {
+    if (!wclock || !wclock->count) {
+        WClockSession s = {.start = -1, .end = -1};
+        return s;
+    }
+
+    return wclock->sessions[wclock->count - 1];
+}
+
 void WClockPrint(WClock *wclock) {
     printf("State: %d\n", wclock->lastSessionActive);
     for (int i = 0; i < wclock->count; i++) {

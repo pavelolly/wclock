@@ -1,4 +1,4 @@
-include Makefile.env
+include Makefile.var
 
 SRC_DIR = src
 UTILS_DIR = utils

@@ -32,6 +32,8 @@ typedef struct {
 void WClockStartSession(WClock *wclock);
 void WClockEndSession(WClock *wclock);
 
+WClockSession WClockGetLastSession(WClock *wclock);
+
 void WClockPrint(WClock *wclock);
 
 void WClockDestroy(WClock *wclock);
@@ -41,6 +43,6 @@ bool WClockDumpFile(const char *filename, WClock *wclock);
 bool WClockLoadFile(const char *filename, WClock *wclock);
 
 // file system operations
-char **WClockFindAllFiles(const char *filename);
+char **WClockFindAllFilesUp(const char *filename);
 
 #endif // WCLOCK_H

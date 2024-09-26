@@ -1,4 +1,4 @@
-include ../Makefile.env
+include ../Makefile.var
 
 darray.o: darray.c darray.h dstring.c dstring.h
 	${CC} ${CFLAGS} ${DFLAGS} -c darray.c dstring.c

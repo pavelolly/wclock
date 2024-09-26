@@ -14,14 +14,14 @@
 
 INSTANTIATE_DARRAY(Cstrs, char *);
 
-char **WClockFindAllFiles(const char *filename) {
+char **WClockFindAllFilesUp(const char *filename) {
     char *cwd = _getcwd(NULL, 0);
 
     Cstrs paths = {0};
 
     char *lsep, *rsep;
     do {
-        printf("Exploring path: '%s'\n", cwd);
+        // printf("Exploring path: '%s'\n", cwd);
 
         DIR *dir = opendir(cwd);
 
