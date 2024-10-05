@@ -1,11 +1,18 @@
 
-CC = gcc
+CC = gcc --std=c99
 RM = rm -f
 
-CFLAGS = --std=c99 -Wall -Wextra -ggdb
+CFLAGS = -ggdb -Wall -Wextra -Werror
 
-SOURCES = darray.c dstring.c wclock_cli.c wclock_core.c wclock_filesystem.c wclock_format.c
-HEADERS = darray.h dstring.h minirent.h static_assert.h wclock.h
+OBJECTS = darray.o dstring.o wclock_cli.o wclock_core.o wclock_filesystem.o wclock_format.o
 
-../wclock.exe: ${SOURCES} ${HEADERS}
-	${CC} ${CFLAGS} -o ../wclock.exe ${SOURCES}
+wclock.exe: ${OBJECTS}
+	${CC} -o wclock.exe ${OBJECTS}
+
+
+darray.o: darray.c darray.h 
+dstring.o: dstring.c darray.h dstring.h
+wclock_cli.o: wclock_cli.c wclock.h
+wclock_core.o: wclock_core.c wclock.h
+wclock_filesystem.o: wclock_filesystem.c wclock.h darray.h dstring.h dirent.h
+wclock_format.o: wclock_format.c wclock.h

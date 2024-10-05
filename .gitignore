@@ -4,6 +4,7 @@
 # executables
 *.o
 *.exe
+*.bat
 
 # generated files
 *.wclock

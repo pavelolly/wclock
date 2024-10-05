@@ -1,10 +1,14 @@
 
-SRC_DIR = src
+RM = rm -f
+MV = mv
+CP = cp
 
-.PHONY: clean all
+.PHONY: all clean
 
 all:
-	${MAKE} -C ${SRC_DIR}/
+	${MAKE} -C src/
+	${CP} src/wclock.exe wclock.exe
 
 clean:
-	${RM} -r *.o *.exe
+	${RM} *.o *.exe
+	${RM} src/*.o src/*.exe

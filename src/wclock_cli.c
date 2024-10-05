@@ -18,9 +18,21 @@ enum Subcommand {
 void Usage();
 enum Subcommand GetSubcommand(const char *literal);
 
-#define TIME_TEXT_BUFFER_SIZE 64
-
 int main(int argc, char *argv[]) {
+
+    CStrs files = {0};
+    DArrayAppend(&files, ".wclock");
+    DArrayAppend(&files, ".wclock.old");
+
+    char *cwd = GetCWD(NULL, 0);
+
+    CStrs paths = FindAllFilesUp(cwd, &files);
+    for (size_t i = 0; i < paths.count; ++i) {
+        printf("%s\n", paths.items[i]);
+    }
+    free(cwd);
+    return 0;
+
     if (argc < 2) {
         Usage();
         return 1;
@@ -40,9 +52,6 @@ int main(int argc, char *argv[]) {
 
     WClock wclock = {0};
 
-    // Used for printing time
-    char timeTextBuffer[TIME_TEXT_BUFFER_SIZE];
-
     bool couldLoad = WClockLoadFile(".wclock", &wclock);
 
     switch (subcommand) {
@@ -50,14 +59,14 @@ int main(int argc, char *argv[]) {
             if (!wclock.lastSessionActive) {
                 WClockStartSession(&wclock);
                 
-                printf("Started new session: %s\n", WClockTimeToString(timeTextBuffer, TIME_TEXT_BUFFER_SIZE, WClockGetLastSession(&wclock).start));
+                printf("Started new session: %s\n", WClockTimeToString(WClockGetLastSession(&wclock).start));
 
                 if (!WClockDumpFile(".wclock", &wclock)) {
                     printf("Failed to dump to .wclock\n");
                     return 1;
                 }
             } else {
-                printf("Session is already active, started at: %s\n", WClockTimeToString(timeTextBuffer, TIME_TEXT_BUFFER_SIZE, WClockGetLastSession(&wclock).start));
+                printf("Session is already active, started at: %s\n", WClockTimeToString(WClockGetLastSession(&wclock).start));
             }
 
 
@@ -66,8 +75,8 @@ int main(int argc, char *argv[]) {
             if (wclock.lastSessionActive) {
                 WClockEndSession(&wclock);
                 WClockSession lastSession = WClockGetLastSession(&wclock);
-                printf("Ended session: %s : ", WClockTimeToString(timeTextBuffer, TIME_TEXT_BUFFER_SIZE, lastSession.start));
-                printf("%s\n",                 WClockTimeToString(timeTextBuffer, TIME_TEXT_BUFFER_SIZE, lastSession.end));
+                printf("Ended session: %s : ", WClockTimeToString(lastSession.start));
+                printf("%s\n",                 WClockTimeToString(lastSession.end));
 
                 if (!WClockDumpFile(".wclock", &wclock)) {
                     printf("Failed to dump to .wclock\n");
@@ -94,13 +103,13 @@ int main(int argc, char *argv[]) {
                 for (int i = 0; i < wclock.count; i++) {
                     WClockSession *s = wclock.sessions + i;
                     if (i < wclock.count - 1 || !wclock.lastSessionActive) {
-                        printf("  %d. %s : ", i + 1, WClockTimeToString(timeTextBuffer, TIME_TEXT_BUFFER_SIZE, s->start));
-                        printf("%s\n",          WClockTimeToString(timeTextBuffer, TIME_TEXT_BUFFER_SIZE, s->end)); 
+                        printf("  %d. %s : ", i + 1, WClockTimeToString(s->start));
+                        printf("%s\n",          WClockTimeToString(s->end)); 
                     }
                 }
                 printf("Current session: %s\n", wclock.lastSessionActive ? "active" : "not active");\
                 if (wclock.lastSessionActive) {
-                    printf("  %d: %s : ...\n", wclock.count, WClockTimeToString(timeTextBuffer, TIME_TEXT_BUFFER_SIZE, WClockGetLastSession(&wclock).start));
+                    printf("  %d: %s : ...\n", wclock.count, WClockTimeToString(WClockGetLastSession(&wclock).start));
                 }
             } else {
                 printf("No .wclock file in current directory\n");

@@ -3,14 +3,9 @@
 
 #include <time.h>
 #include <stdint.h>
+#include <stdbool.h>
 
-#undef bool
-#undef false
-#undef true
-
-typedef uint8_t bool;
-#define false 0
-#define true  1
+#include "darray.h"
 
 typedef unsigned int uint;
 
@@ -35,7 +30,7 @@ void WClockClear(WClock *wclock);
 
 WClockSession WClockGetLastSession(WClock *wclock);
 
-char *WClockTimeToString(char *dest, size_t destSize, time_t time);
+const char *WClockTimeToString(time_t time);
 
 void WClockPrint(WClock *wclock);
 void WClockDestroy(WClock *wclock);
@@ -45,6 +40,24 @@ bool WClockDumpFile(const char *filename, WClock *wclock);
 bool WClockLoadFile(const char *filename, WClock *wclock);
 
 // file system operations
-char **WClockFindAllFilesUp(const char *filename);
+#ifdef _WIN32
+    #include <direct.h>
+    #define GetCWD _getcwd
+#else
+    #include <unistd.h>
+    #define GetCWD getcwd
+#endif
+
+
+INSTANTIATE_DARRAY(CStrs, char *);
+void CStrsFree(CStrs *cstrs);
+
+CStrs GetFiles(const char *dirPath);
+bool PathExists(const char *path);
+bool IsDir(const char *path);
+bool IsFile(const char *path);
+const char *CutPath(const char *path);
+CStrs FindAllFilesUp(const char *dirPath, const CStrs *filesList);
+
 
 #endif // WCLOCK_H

@@ -52,9 +52,12 @@ WClockSession WClockGetLastSession(WClock *wclock) {
     return wclock->sessions[wclock->count - 1];
 }
 
-char *WClockTimeToString(char *dest, size_t destSize, time_t time) {
-    strftime(dest, destSize, "%d.%m.%Y %H:%M:%S", localtime(&time));
-    return dest;
+#define TIME_TEXT_BUFFER_SIZE 64
+
+const char *WClockTimeToString(time_t time) {
+    static char buffer[TIME_TEXT_BUFFER_SIZE] = {0};
+    strftime(buffer, TIME_TEXT_BUFFER_SIZE, "%d.%m.%Y %H:%M:%S", localtime(&time));
+    return buffer;
 }
 
 void WClockPrint(WClock *wclock) {
